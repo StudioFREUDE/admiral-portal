@@ -343,15 +343,21 @@ function resetPortal() {
 // =============================================================================
 // ANIMATION LOOP
 // =============================================================================
+let frameCount = 0;
+
 function animate(time) {
     requestAnimationFrame(animate);
 
+    frameCount++;
+
+    // Log first few frames and canvas size
+    if (frameCount <= 3) {
+        const canvas = renderer.domElement;
+        console.log(`Frame ${frameCount}: canvas ${canvas.width}x${canvas.height}, visible=${canvas.style.display !== 'none'}`);
+    }
+
     // Update camera from device
     camera.updateFrame(renderer);
-
-    if (time % 60 === 0) {
-        // console.log("Frame update"); // Uncomment if needed, but might spam
-    }
 
     // Animate portal
     if (hasPlaced) {
