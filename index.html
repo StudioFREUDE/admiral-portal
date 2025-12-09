@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>AR Portal Experience</title>
+    
+    <!-- A-Frame -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    
+    <!-- AR.js with location support -->
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    
+    <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h2>Initializing AR Experience</h2>
+            <p id="loading-status">Requesting permissions...</p>
+        </div>
+    </div>
+
+    <!-- Permission Error Screen -->
+    <div id="permission-error" class="overlay hidden">
+        <div class="error-content">
+            <div class="error-icon">⚠️</div>
+            <h2>Permissions Required</h2>
+            <p id="error-message">Camera and location access are required for the AR experience.</p>
+            <button id="retry-btn" class="btn">Try Again</button>
+        </div>
+    </div>
+
+    <!-- Distance HUD -->
+    <div id="distance-hud" class="hud hidden">
+        <div class="distance-card">
+            <div class="distance-label">Distance to Portal</div>
+            <div id="distance-value" class="distance-value">--</div>
+            <div id="distance-status" class="distance-status">Locating...</div>
+        </div>
+        <div id="compass" class="compass">
+            <div id="compass-arrow" class="compass-arrow">↑</div>
+        </div>
+    </div>
+
+    <!-- Debug Panel (toggle with 'D' key) -->
+    <div id="debug-panel" class="debug-panel hidden">
+        <div class="debug-title">Debug Info</div>
+        <div id="debug-coords">Coords: --</div>
+        <div id="debug-heading">Heading: --</div>
+        <div id="debug-accuracy">Accuracy: --</div>
+        <div id="debug-portal">Portal: Hidden</div>
+    </div>
+
+    <!-- A-Frame AR Scene -->
+    <a-scene
+        id="ar-scene"
+        vr-mode-ui="enabled: false"
+        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
+        renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true;"
+        loading-screen="enabled: false"
+        embedded
+    >
+        <!-- Assets -->
+        <a-assets>
+            <a-mixin id="portal-material" material="color: #8B5CF6; emissive: #7C3AED; emissiveIntensity: 0.5; side: double; transparent: true; opacity: 0.9;"></a-mixin>
+        </a-assets>
+
+        <!-- Camera with GPS tracking -->
+        <a-camera 
+            id="ar-camera"
+            gps-new-camera="gpsMinDistance: 3; positionMinAccuracy: 100;"
+            look-controls-enabled="false"
+            arjs-look-controls="smoothingFactor: 0.1"
+            position="0 1.6 0"
+        ></a-camera>
+
+        <!-- Portal Entity - will be positioned at GPS coordinates -->
+        <a-entity
+            id="portal"
+            gps-new-entity-place="latitude: 52.5200; longitude: 13.4050;"
+            visible="false"
+        >
+            <!-- Main ellipse portal (torus shape) -->
+            <a-torus
+                id="portal-ring"
+                radius="1.2"
+                radius-tubular="0.08"
+                segments-radial="64"
+                segments-tubular="32"
+                material="color: #8B5CF6; emissive: #7C3AED; emissiveIntensity: 0.6; side: double; transparent: true; opacity: 0.95;"
+                scale="1 1.4 1"
+                animation="property: position; to: 0 0.15 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true"
+                animation__rotate="property: rotation; to: 0 360 0; dur: 20000; easing: linear; loop: true"
+            ></a-torus>
+
+            <!-- Inner glow ring -->
+            <a-torus
+                radius="1.0"
+                radius-tubular="0.04"
+                segments-radial="48"
+                segments-tubular="24"
+                material="color: #C4B5FD; emissive: #A78BFA; emissiveIntensity: 0.8; transparent: true; opacity: 0.7;"
+                scale="1 1.4 1"
+                animation="property: position; to: 0 0.15 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true"
+                animation__scale="property: scale; from: 0.95 1.33 0.95; to: 1.05 1.47 1.05; dir: alternate; dur: 1500; easing: easeInOutQuad; loop: true"
+            ></a-torus>
+
+            <!-- Outer glow effect -->
+            <a-torus
+                radius="1.4"
+                radius-tubular="0.02"
+                segments-radial="48"
+                segments-tubular="16"
+                material="color: #DDD6FE; emissive: #C4B5FD; emissiveIntensity: 1; transparent: true; opacity: 0.4;"
+                scale="1 1.4 1"
+                animation="property: position; to: 0 0.15 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true"
+                animation__opacity="property: material.opacity; from: 0.3; to: 0.6; dir: alternate; dur: 1200; easing: easeInOutSine; loop: true"
+            ></a-torus>
+
+            <!-- Center shimmer effect -->
+            <a-circle
+                radius="0.85"
+                segments="64"
+                material="color: #7C3AED; transparent: true; opacity: 0.2; side: double;"
+                scale="1 1.4 1"
+                animation="property: position; to: 0 0.15 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true"
+                animation__shimmer="property: material.opacity; from: 0.1; to: 0.3; dir: alternate; dur: 800; easing: easeInOutSine; loop: true"
+            ></a-circle>
+        </a-entity>
+        
+        <!-- Light sources -->
+        <a-light type="ambient" color="#ffffff" intensity="0.6"></a-light>
+        <a-light type="directional" color="#ffffff" intensity="0.4" position="0 10 0"></a-light>
+    </a-scene>
+
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
