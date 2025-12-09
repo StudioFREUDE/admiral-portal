@@ -8,18 +8,19 @@
 // =============================================================================
 const CONFIG = {
     portal: {
-        latitude: 0,            // Will be set to current location
-        longitude: 0,           // Will be set to current location
+        latitude: 0,            // Will be set automatically
+        longitude: 0,           // Will be set automatically
         altitude: 0,            // Altitude above ground (meters)
         activationRadius: 50,   // Distance in meters to show portal
-        heightAboveGround: 1.5  // How high portal floats above ground
+        heightAboveGround: 1.5, // How high portal floats above ground
+        distanceFromUser: 10    // Distance in meters to place portal in front of user
     },
     gps: {
         enableHighAccuracy: true,
         maximumAge: 0,
         timeout: 30000
     },
-    // For testing: automatically set portal to user's current location
+    // For testing: automatically set portal in front of user's current location
     autoSetToCurrentLocation: true,
     debug: false
 };
@@ -188,11 +189,19 @@ async function requestPermissions() {
         state.hasPermissions = true;
         state.userPosition = position.coords;
 
-        // Auto-set portal to current location for testing
+        // Auto-set portal in front of user's current location for testing
         if (CONFIG.autoSetToCurrentLocation) {
-            CONFIG.portal.latitude = position.coords.latitude;
-            CONFIG.portal.longitude = position.coords.longitude;
-            console.log(`Portal auto-set to current location: ${position.coords.latitude}, ${position.coords.longitude}`);
+            // Calculate position in front of user (default: north, or use device heading if available)
+            const bearing = state.heading !== null ? state.heading : 0; // Use heading or default to north
+            const offsetCoords = calculateOffsetCoordinates(
+                position.coords.latitude,
+                position.coords.longitude,
+                CONFIG.portal.distanceFromUser,
+                bearing
+            );
+            CONFIG.portal.latitude = offsetCoords.latitude;
+            CONFIG.portal.longitude = offsetCoords.longitude;
+            console.log(`Portal placed ${CONFIG.portal.distanceFromUser}m in front of user at: ${offsetCoords.latitude.toFixed(6)}, ${offsetCoords.longitude.toFixed(6)}`);
         }
 
         // Start the AR experience
@@ -384,6 +393,37 @@ function calculateBearing(lat1, lon1, lat2, lon2) {
 
     const θ = Math.atan2(y, x);
     return (θ * 180 / Math.PI + 360) % 360;
+}
+
+/**
+ * Calculate new GPS coordinates given a starting point, distance, and bearing
+ * @param {number} lat - Starting latitude in degrees
+ * @param {number} lon - Starting longitude in degrees
+ * @param {number} distance - Distance in meters
+ * @param {number} bearing - Bearing in degrees (0 = north, 90 = east)
+ * @returns {{latitude: number, longitude: number}} New coordinates
+ */
+function calculateOffsetCoordinates(lat, lon, distance, bearing) {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = lat * Math.PI / 180;
+    const λ1 = lon * Math.PI / 180;
+    const θ = bearing * Math.PI / 180;
+    const δ = distance / R; // Angular distance
+
+    const φ2 = Math.asin(
+        Math.sin(φ1) * Math.cos(δ) +
+        Math.cos(φ1) * Math.sin(δ) * Math.cos(θ)
+    );
+
+    const λ2 = λ1 + Math.atan2(
+        Math.sin(θ) * Math.sin(δ) * Math.cos(φ1),
+        Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2)
+    );
+
+    return {
+        latitude: φ2 * 180 / Math.PI,
+        longitude: λ2 * 180 / Math.PI
+    };
 }
 
 // =============================================================================
