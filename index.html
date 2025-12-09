@@ -120,8 +120,8 @@
     <!-- AR Scene -->
     <a-scene id="ar-scene" embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
         vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true; precision: medium;" style="display: none;">
-        <!-- Portal - positioned in world space -->
-        <a-entity id="portal" position="0 0 -4" visible="true">
+        <!-- Portal - positioned in world space, in front of camera at slightly lower than eye level -->
+        <a-entity id="portal" position="0 0.5 -4" visible="true">
             <!-- Main torus (portal ring) - horizontal orientation -->
             <a-torus color="#8B5CF6" radius="1" radius-tubular="0.08" segments-radial="48" segments-tubular="24"
                 material="emissive: #7C3AED; emissiveIntensity: 0.5; side: double;" rotation="90 0 0"
@@ -162,7 +162,7 @@
                 animation="property: position; to: 0.4 0.5 -0.7; dir: alternate; loop: true; dur: 1400"></a-sphere>
         </a-entity>
 
-        <a-entity camera></a-entity>
+        <a-entity camera look-controls="magicWindowTrackingEnabled: true" position="0 1.6 0"></a-entity>
     </a-scene>
 
     <script>
@@ -171,7 +171,26 @@
         const arScene = document.getElementById('ar-scene');
         const infoHud = document.getElementById('info-hud');
 
-        startBtn.addEventListener('click', function () {
+        // Request iOS device orientation permission
+        async function requestOrientationPermission() {
+            if (typeof DeviceOrientationEvent !== 'undefined' &&
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    console.log('Device orientation permission:', permission);
+                    return permission === 'granted';
+                } catch (e) {
+                    console.warn('Orientation permission error:', e);
+                    return false;
+                }
+            }
+            return true; // Non-iOS or older iOS doesn't need permission
+        }
+
+        startBtn.addEventListener('click', async function () {
+            // Request orientation permission for iOS
+            await requestOrientationPermission();
+
             // Hide overlay
             startOverlay.classList.add('hidden');
 
