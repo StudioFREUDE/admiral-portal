@@ -7,6 +7,37 @@ import * as THREE from 'three';
 import * as ZapparThree from '@zappar/zappar-threejs';
 
 // =============================================================================
+// DEBUG
+// =============================================================================
+// Enable on-screen debug
+const DEBUG_MODE = true;
+
+if (DEBUG_MODE) {
+    const debugConsole = document.getElementById('debug-console');
+    if (debugConsole) {
+        debugConsole.style.display = 'block';
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+
+        function logToScreen(type, args) {
+            const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+            const line = document.createElement('div');
+            line.textContent = `[${type}] ${msg}`;
+            line.style.borderBottom = '1px solid #333';
+            if (type === 'ERROR') line.style.color = 'red';
+            if (type === 'WARN') line.style.color = 'orange';
+            debugConsole.appendChild(line);
+            debugConsole.scrollTop = debugConsole.scrollHeight;
+        }
+
+        console.log = (...args) => { logToScreen('LOG', args); originalLog.apply(console, args); };
+        console.error = (...args) => { logToScreen('ERROR', args); originalError.apply(console, args); };
+        console.warn = (...args) => { logToScreen('WARN', args); originalWarn.apply(console, args); };
+    }
+}
+
+// =============================================================================
 // DOM ELEMENTS
 // =============================================================================
 const startOverlay = document.getElementById('start-overlay');
@@ -210,17 +241,34 @@ function startScene() {
     scene = new THREE.Scene();
 
     // Create Zappar camera
+    console.log("Creating Zappar Camera...");
     camera = new ZapparThree.Camera();
 
     // The Zappar camera must be attached to the scene
     scene.add(camera);
+    console.log("Camera added to scene");
 
     // Start the camera
+    console.log("Starting camera...");
     camera.start();
+    console.log("Camera start requested");
+
+    // Check for video element after delay
+    setTimeout(() => {
+        const videos = document.querySelectorAll('video');
+        console.log(`Found ${videos.length} video elements`);
+        videos.forEach((v, i) => {
+            console.log(`Video ${i}: src=${v.srcObject ? 'active' : 'null'}, readyState=${v.readyState}, paused=${v.paused}`);
+            v.style.zIndex = -1; // Force behind
+            v.style.display = 'block';
+            v.style.visibility = 'visible';
+        });
+    }, 2000);
 
     // Disable scene background to let video feed show through transparent canvas
     // scene.background = camera.backgroundTexture; 
     scene.background = null;
+    console.log("Scene background disabled");
 
     // Create Instant World Tracker
     instantTracker = new ZapparThree.InstantWorldTracker();
