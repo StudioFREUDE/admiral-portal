@@ -250,25 +250,20 @@ function startScene() {
 
     // Start the camera
     console.log("Starting camera...");
-    camera.start();
+    camera.start(true); // strict user facing
     console.log("Camera start requested");
 
-    // Check for video element after delay
-    setTimeout(() => {
-        const videos = document.querySelectorAll('video');
-        console.log(`Found ${videos.length} video elements`);
-        videos.forEach((v, i) => {
-            console.log(`Video ${i}: src=${v.srcObject ? 'active' : 'null'}, readyState=${v.readyState}, paused=${v.paused}`);
-            v.style.zIndex = -1; // Force behind
-            v.style.display = 'block';
-            v.style.visibility = 'visible';
-        });
-    }, 2000);
+    // Re-enable scene background (Standard Zappar way)
+    scene.background = camera.backgroundTexture;
+    console.log("Scene background enabled");
 
-    // Disable scene background to let video feed show through transparent canvas
-    // scene.background = camera.backgroundTexture; 
-    scene.background = null;
-    console.log("Scene background disabled");
+    // Add a specialized debug cube to see if scene is rendering
+    const debugGeom = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    const debugMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const debugCube = new THREE.Mesh(debugGeom, debugMat);
+    debugCube.position.set(0, 0, -2);
+    scene.add(debugCube);
+    console.log("Debug cube added at (0,0,-2)");
 
     // Create Instant World Tracker
     instantTracker = new ZapparThree.InstantWorldTracker();
@@ -353,6 +348,10 @@ function animate(time) {
 
     // Update camera from device
     camera.updateFrame(renderer);
+
+    if (time % 60 === 0) {
+        // console.log("Frame update"); // Uncomment if needed, but might spam
+    }
 
     // Animate portal
     if (hasPlaced) {
