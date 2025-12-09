@@ -57,7 +57,29 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 1;
+    z-index: 2;
+    /* Canvas on top */
+    pointer-events: none;
+    /* Let touches pass through if needed, but we catch them on document */
+}
+
+/* Zappar video element */
+.zappar-video {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    z-index: 0 !important;
+    /* Video behind */
+    display: block !important;
+}
+
+video {
+    /* Generic catch-all for Zappar video */
+    z-index: 0 !important;
+    display: block !important;
 }
 
 /* Force A-Frame canvas to be transparent */

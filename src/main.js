@@ -190,6 +190,7 @@ async function initAR() {
         antialias: true,
         alpha: true
     });
+    renderer.setClearColor(0x000000, 0); // Transparent clear color
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
@@ -217,8 +218,9 @@ function startScene() {
     // Start the camera
     camera.start();
 
-    // Set background to camera feed
-    scene.background = camera.backgroundTexture;
+    // Disable scene background to let video feed show through transparent canvas
+    // scene.background = camera.backgroundTexture; 
+    scene.background = null;
 
     // Create Instant World Tracker
     instantTracker = new ZapparThree.InstantWorldTracker();
