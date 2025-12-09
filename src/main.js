@@ -135,22 +135,27 @@ function waitForSceneReady() {
 // PORTAL POSITIONING
 // =============================================================================
 function positionPortalInFront() {
-    if (!elements.portal) return;
+    if (!elements.portal) {
+        console.error('Portal element not found!');
+        return;
+    }
 
-    // Position portal in front of camera, at ground level
-    // Camera is at y=1.6, so portal at y=0 is on the ground
+    // Position portal in front of camera
+    // Since this is AR overlay, position relative to camera starting point
     const distance = CONFIG.portal.distanceFromCamera;
 
+    // Position: directly in front, slightly below eye level
     elements.portal.setAttribute('position', {
         x: 0,
-        y: -1.6 + CONFIG.portal.heightFromGround,  // Ground level relative to camera
+        y: -0.5,  // Slightly below eye level so the horizontal portal is visible
         z: -distance
     });
 
     // Make portal visible
     elements.portal.setAttribute('visible', true);
 
-    console.log(`Portal positioned ${distance}m ahead`);
+    console.log(`Portal positioned: x=0, y=-0.5, z=-${distance}`);
+    console.log('Portal visible:', elements.portal.getAttribute('visible'));
 }
 
 function repositionPortal() {
