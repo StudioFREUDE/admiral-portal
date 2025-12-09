@@ -42,7 +42,7 @@ body {
     height: 100%;
     overflow: hidden;
     font-family: var(--font-family);
-    background: #000;
+    background: transparent;
     color: var(--text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -58,6 +58,13 @@ body {
     width: 100%;
     height: 100%;
     z-index: 1;
+    background: transparent !important;
+}
+
+/* Force A-Frame canvas to be transparent */
+#ar-scene canvas,
+.a-canvas {
+    background: transparent !important;
 }
 
 /* =============================================================================

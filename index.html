@@ -79,7 +79,8 @@
 
     <!-- A-Frame 3D Scene (transparent background, overlays camera) -->
     <a-scene id="ar-scene" class="hidden" embedded vr-mode-ui="enabled: false"
-        renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true;" background="color: transparent">
+        renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true; precision: medium;"
+        background="transparent: true" style="background: transparent !important;">
         <!-- Portal Entity -->
         <a-entity id="portal" visible="false" position="0 0 -3">
             <!-- Main ellipse portal (torus shape) - laying flat -->
