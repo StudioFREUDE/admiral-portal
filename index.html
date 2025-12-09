@@ -5,144 +5,192 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>AR Portal Experience</title>
+    <title>AR Portal</title>
 
-    <!-- A-Frame -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-
-    <link rel="stylesheet" href="/src/styles.css">
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
     <style>
-        /* Camera background video */
-        #camera-feed {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 0;
+        * {
+            margin: 0;
+            padding: 0;
         }
 
-        #ar-scene {
+        html,
+        body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        /* Hide AR.js stats and video elements */
+        .a-enter-vr,
+        .a-enter-ar {
+            display: none !important;
+        }
+
+        /* Start overlay */
+        #start-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 1;
+            background: linear-gradient(135deg, #1a0a2e 0%, #0f0515 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            color: white;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        #start-overlay.hidden {
+            display: none;
+        }
+
+        #start-overlay h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #A78BFA, #DDD6FE);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        #start-overlay p {
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 2rem;
+        }
+
+        #start-btn {
+            padding: 1rem 2.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 10px 40px rgba(139, 92, 246, 0.4);
+        }
+
+        .portal-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Info HUD */
+        #info-hud {
+            position: fixed;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 10, 30, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            color: white;
+            font-size: 0.9rem;
+            z-index: 100;
+            display: none;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        #info-hud.visible {
+            display: block;
         }
     </style>
 </head>
 
 <body>
-    <!-- Camera Feed Background -->
-    <video id="camera-feed" autoplay playsinline muted></video>
-
-    <!-- Start Screen - User must tap to begin -->
-    <div id="start-screen" class="overlay">
-        <div class="start-content">
-            <div class="portal-icon">🌀</div>
-            <h1>AR Portal</h1>
-            <p>Experience an augmented reality portal</p>
-            <button id="start-btn" class="btn btn-large">Start AR Experience</button>
-            <p class="hint">The portal will appear in front of you</p>
-        </div>
+    <!-- Start Overlay -->
+    <div id="start-overlay">
+        <div class="portal-icon">🌀</div>
+        <h1>AR Portal</h1>
+        <p>Point your camera to see the portal appear!</p>
+        <button id="start-btn">Start AR Experience</button>
     </div>
 
-    <!-- Loading Screen -->
-    <div id="loading-screen" class="overlay hidden">
-        <div class="loading-content">
-            <div class="spinner"></div>
-            <h2>Initializing AR</h2>
-            <p id="loading-status">Requesting camera access...</p>
-        </div>
-    </div>
+    <!-- Info HUD -->
+    <div id="info-hud">🌀 Portal Active - Look around!</div>
 
-    <!-- Permission Error Screen -->
-    <div id="permission-error" class="overlay hidden">
-        <div class="error-content">
-            <div class="error-icon">⚠️</div>
-            <h2>Permissions Required</h2>
-            <p id="error-message">Camera access is required for the AR experience.</p>
-            <button id="retry-btn" class="btn">Try Again</button>
-        </div>
-    </div>
+    <!-- AR Scene -->
+    <a-scene id="ar-scene" embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
+        vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true; precision: medium;" style="display: none;">
+        <!-- Portal - positioned in world space -->
+        <a-entity id="portal" position="0 0 -4" visible="true">
+            <!-- Main torus (portal ring) - horizontal orientation -->
+            <a-torus color="#8B5CF6" radius="1" radius-tubular="0.08" segments-radial="48" segments-tubular="24"
+                material="emissive: #7C3AED; emissiveIntensity: 0.5; side: double;" rotation="90 0 0"
+                animation="property: rotation; to: 90 360 0; loop: true; dur: 10000; easing: linear"
+                animation__float="property: position; to: 0 0.2 0; dir: alternate; loop: true; dur: 2000; easing: easeInOutSine"></a-torus>
 
-    <!-- Portal Info HUD (shown after placement) -->
-    <div id="portal-hud" class="hud hidden">
-        <div class="portal-card">
-            <div class="portal-status">🌀 Portal Active</div>
-            <button id="reset-btn" class="btn btn-small">Reposition</button>
-        </div>
-    </div>
-
-    <!-- A-Frame 3D Scene (transparent background, overlays camera) -->
-    <a-scene id="ar-scene" class="hidden" embedded vr-mode-ui="enabled: false"
-        renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true; precision: medium;"
-        background="transparent: true" style="background: transparent !important;">
-        <!-- Portal Entity -->
-        <a-entity id="portal" visible="false" position="0 0 -3">
-            <!-- Main ellipse portal (torus shape) - laying flat -->
-            <a-torus id="portal-ring" radius="0.8" radius-tubular="0.05" segments-radial="64" segments-tubular="32"
-                material="color: #8B5CF6; emissive: #7C3AED; emissiveIntensity: 0.6; side: double; transparent: true; opacity: 0.95;"
+            <!-- Inner ring -->
+            <a-torus color="#C4B5FD" radius="0.75" radius-tubular="0.04" segments-radial="36" segments-tubular="18"
+                material="emissive: #A78BFA; emissiveIntensity: 0.6; transparent: true; opacity: 0.8; side: double;"
                 rotation="90 0 0"
-                animation="property: position; to: 0 0.15 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true"
-                animation__rotate="property: rotation; from: 90 0 0; to: 90 360 0; dur: 12000; easing: linear; loop: true"></a-torus>
+                animation="property: scale; from: 0.95 0.95 0.95; to: 1.05 1.05 1.05; dir: alternate; loop: true; dur: 1500; easing: easeInOutQuad"
+                animation__float="property: position; to: 0 0.2 0; dir: alternate; loop: true; dur: 2000; easing: easeInOutSine"></a-torus>
 
-            <!-- Inner glow ring -->
-            <a-torus radius="0.6" radius-tubular="0.03" segments-radial="48" segments-tubular="24"
-                material="color: #C4B5FD; emissive: #A78BFA; emissiveIntensity: 0.8; transparent: true; opacity: 0.7;"
+            <!-- Portal center (dark void) -->
+            <a-circle color="#0a0015" radius="0.65" segments="32"
+                material="side: double; transparent: true; opacity: 0.9;" rotation="90 0 0"
+                animation__float="property: position; to: 0 0.2 0; dir: alternate; loop: true; dur: 2000; easing: easeInOutSine"></a-circle>
+
+            <!-- Swirl effect -->
+            <a-circle color="#7C3AED" radius="0.55" segments="32"
+                material="side: double; transparent: true; opacity: 0.4;" rotation="90 0 0"
+                animation="property: rotation; to: 90 0 360; loop: true; dur: 5000; easing: linear"
+                animation__float="property: position; to: 0 0.22 0; dir: alternate; loop: true; dur: 2000; easing: easeInOutSine"></a-circle>
+
+            <!-- Outer glow ring -->
+            <a-torus color="#DDD6FE" radius="1.2" radius-tubular="0.02" segments-radial="36" segments-tubular="12"
+                material="emissive: #C4B5FD; emissiveIntensity: 0.8; transparent: true; opacity: 0.5; side: double;"
                 rotation="90 0 0"
-                animation="property: position; to: 0 0.15 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true"
-                animation__scale="property: scale; from: 0.95 0.95 0.95; to: 1.08 1.08 1.08; dir: alternate; dur: 1500; easing: easeInOutQuad; loop: true"></a-torus>
-
-            <!-- Outer glow effect -->
-            <a-torus radius="1.0" radius-tubular="0.015" segments-radial="48" segments-tubular="16"
-                material="color: #DDD6FE; emissive: #C4B5FD; emissiveIntensity: 1; transparent: true; opacity: 0.4;"
-                rotation="90 0 0"
-                animation="property: position; to: 0 0.15 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true"
-                animation__opacity="property: material.opacity; from: 0.3; to: 0.6; dir: alternate; dur: 1200; easing: easeInOutSine; loop: true"></a-torus>
-
-            <!-- Portal surface (the dark center) -->
-            <a-circle radius="0.55" segments="64"
-                material="color: #0a0015; transparent: true; opacity: 0.85; side: double;" rotation="90 0 0"
-                animation="property: position; to: 0 0.15 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true"></a-circle>
-
-            <!-- Swirling inner effect -->
-            <a-circle radius="0.5" segments="64"
-                material="color: #7C3AED; transparent: true; opacity: 0.3; side: double;" rotation="90 0 0"
-                animation="property: position; to: 0 0.17 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true"
-                animation__rotate="property: rotation; from: 90 0 0; to: 90 0 -360; dur: 6000; easing: linear; loop: true"></a-circle>
+                animation="property: material.opacity; from: 0.3; to: 0.7; dir: alternate; loop: true; dur: 1000"
+                animation__float="property: position; to: 0 0.2 0; dir: alternate; loop: true; dur: 2000; easing: easeInOutSine"></a-torus>
 
             <!-- Floating particles -->
-            <a-sphere position="0.7 0.2 0" radius="0.025"
-                material="color: #C4B5FD; emissive: #A78BFA; emissiveIntensity: 1;"
-                animation="property: position; to: 0.7 0.5 0; dir: alternate; dur: 1400; easing: easeInOutSine; loop: true"></a-sphere>
-            <a-sphere position="-0.65 0.25 0.3" radius="0.02"
-                material="color: #DDD6FE; emissive: #C4B5FD; emissiveIntensity: 1;"
-                animation="property: position; to: -0.65 0.55 0.3; dir: alternate; dur: 1800; easing: easeInOutSine; loop: true"></a-sphere>
-            <a-sphere position="0.35 0.2 -0.6" radius="0.022"
-                material="color: #8B5CF6; emissive: #7C3AED; emissiveIntensity: 1;"
-                animation="property: position; to: 0.35 0.48 -0.6; dir: alternate; dur: 1100; easing: easeInOutSine; loop: true"></a-sphere>
-            <a-sphere position="-0.4 0.18 -0.55" radius="0.015"
-                material="color: #C4B5FD; emissive: #A78BFA; emissiveIntensity: 1;"
-                animation="property: position; to: -0.4 0.42 -0.55; dir: alternate; dur: 1600; easing: easeInOutSine; loop: true"></a-sphere>
+            <a-sphere position="0.9 0.3 0" radius="0.03" color="#C4B5FD" material="emissive: #A78BFA"
+                animation="property: position; to: 0.9 0.6 0; dir: alternate; loop: true; dur: 1200"></a-sphere>
+            <a-sphere position="-0.8 0.25 0.2" radius="0.025" color="#DDD6FE" material="emissive: #C4B5FD"
+                animation="property: position; to: -0.8 0.55 0.2; dir: alternate; loop: true; dur: 1600"></a-sphere>
+            <a-sphere position="0.4 0.2 -0.7" radius="0.02" color="#8B5CF6" material="emissive: #7C3AED"
+                animation="property: position; to: 0.4 0.5 -0.7; dir: alternate; loop: true; dur: 1400"></a-sphere>
         </a-entity>
 
-        <!-- Camera with device orientation -->
-        <a-entity id="camera-rig" position="0 1.6 0">
-            <a-camera id="ar-camera"
-                look-controls="enabled: true; magicWindowTrackingEnabled: true; touchEnabled: false"
-                wasd-controls="enabled: false"></a-camera>
-        </a-entity>
-
-        <!-- Ambient light -->
-        <a-light type="ambient" color="#ffffff" intensity="0.7"></a-light>
-        <a-light type="directional" color="#ffffff" intensity="0.4" position="1 2 1"></a-light>
+        <a-entity camera></a-entity>
     </a-scene>
 
-    <script type="module" src="/src/main.js"></script>
+    <script>
+        const startOverlay = document.getElementById('start-overlay');
+        const startBtn = document.getElementById('start-btn');
+        const arScene = document.getElementById('ar-scene');
+        const infoHud = document.getElementById('info-hud');
+
+        startBtn.addEventListener('click', function () {
+            // Hide overlay
+            startOverlay.classList.add('hidden');
+
+            // Show AR scene
+            arScene.style.display = 'block';
+
+            // Show HUD after short delay
+            setTimeout(() => {
+                infoHud.classList.add('visible');
+            }, 1000);
+
+            console.log('AR Experience started');
+        });
+
+        // Log when scene is ready
+        arScene.addEventListener('loaded', function () {
+            console.log('A-Frame scene loaded');
+        });
+    </script>
 </body>
 
 </html>
