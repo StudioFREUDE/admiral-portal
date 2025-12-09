@@ -211,10 +211,14 @@ function startScene() {
     // Create Zappar camera
     camera = new ZapparThree.Camera();
 
-    // Add camera background (shows device camera feed)
-    const cameraBackground = new ZapparThree.CameraEnvironmentMap();
+    // The Zappar camera must be attached to the scene
+    scene.add(camera);
+
+    // Start the camera
+    camera.start();
+
+    // Set background to camera feed
     scene.background = camera.backgroundTexture;
-    scene.environment = cameraBackground.environmentMap;
 
     // Create Instant World Tracker
     instantTracker = new ZapparThree.InstantWorldTracker();
