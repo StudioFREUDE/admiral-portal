@@ -1,6 +1,6 @@
 /**
  * AR Portal Web App - Main Application Logic
- * Simple tap-to-place AR portal experience
+ * Camera-based AR with 3D portal overlay
  */
 
 // =============================================================================
@@ -8,10 +8,9 @@
 // =============================================================================
 const CONFIG = {
     portal: {
-        distanceFromCamera: 2.5,  // Meters in front of camera when placed
-        heightFromGround: 0       // Portal sits on the ground
-    },
-    debug: false
+        distanceFromCamera: 3,    // Meters in front of camera
+        heightFromGround: 0       // Portal sits on ground level
+    }
 };
 
 // =============================================================================
@@ -19,8 +18,7 @@ const CONFIG = {
 // =============================================================================
 let state = {
     isARActive: false,
-    isPortalPlaced: false,
-    portalPosition: { x: 0, y: 0, z: -3 }
+    cameraStream: null
 };
 
 // =============================================================================
@@ -35,6 +33,7 @@ document.addEventListener('DOMContentLoaded', init);
 
 function init() {
     // Cache DOM elements
+    elements.cameraFeed = document.getElementById('camera-feed');
     elements.startScreen = document.getElementById('start-screen');
     elements.startBtn = document.getElementById('start-btn');
     elements.loadingScreen = document.getElementById('loading-screen');
@@ -42,21 +41,17 @@ function init() {
     elements.permissionError = document.getElementById('permission-error');
     elements.errorMessage = document.getElementById('error-message');
     elements.retryBtn = document.getElementById('retry-btn');
-    elements.placementUI = document.getElementById('placement-ui');
     elements.portalHud = document.getElementById('portal-hud');
     elements.resetBtn = document.getElementById('reset-btn');
     elements.arScene = document.getElementById('ar-scene');
     elements.portal = document.getElementById('portal');
     elements.camera = document.getElementById('ar-camera');
+    elements.cameraRig = document.getElementById('camera-rig');
 
     // Set up event listeners
     elements.startBtn?.addEventListener('click', startExperience);
     elements.retryBtn?.addEventListener('click', startExperience);
-    elements.resetBtn?.addEventListener('click', resetPortal);
-
-    // Handle scene tap for portal placement
-    elements.arScene?.addEventListener('click', handleSceneTap);
-    elements.arScene?.addEventListener('touchend', handleSceneTap);
+    elements.resetBtn?.addEventListener('click', repositionPortal);
 
     console.log('AR Portal initialized');
 }
@@ -69,40 +64,45 @@ async function startExperience() {
     elements.loadingScreen?.classList.remove('hidden');
 
     try {
-        updateLoadingStatus('Requesting camera access...');
+        updateLoadingStatus('Accessing camera...');
 
-        // Request camera permission
+        // Request camera with back-facing preference
         const stream = await navigator.mediaDevices.getUserMedia({
             video: {
-                facingMode: 'environment',
+                facingMode: { ideal: 'environment' },
                 width: { ideal: 1920 },
                 height: { ideal: 1080 }
-            }
+            },
+            audio: false
         });
 
-        // Stop the test stream - AR.js will create its own
-        stream.getTracks().forEach(track => track.stop());
+        state.cameraStream = stream;
+
+        // Display camera feed
+        if (elements.cameraFeed) {
+            elements.cameraFeed.srcObject = stream;
+            await elements.cameraFeed.play();
+        }
 
         updateLoadingStatus('Starting AR...');
 
         // Show AR scene
         elements.arScene?.classList.remove('hidden');
 
-        // Wait for scene to initialize
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Wait for A-Frame to initialize
+        await waitForSceneReady();
 
-        // Hide loading, show placement UI
+        // Hide loading
         elements.loadingScreen?.classList.add('hidden');
-        elements.placementUI?.classList.remove('hidden');
+
+        // Position and show portal
+        positionPortalInFront();
+
+        // Show HUD
+        elements.portalHud?.classList.remove('hidden');
 
         state.isARActive = true;
-
-        // Auto-place portal after a short delay for better UX
-        setTimeout(() => {
-            if (!state.isPortalPlaced) {
-                placePortalInFront();
-            }
-        }, 1500);
+        console.log('AR Experience started');
 
     } catch (error) {
         console.error('Start error:', error);
@@ -111,69 +111,71 @@ async function startExperience() {
 }
 
 // =============================================================================
-// PORTAL PLACEMENT
+// SCENE READY
 // =============================================================================
-function handleSceneTap(event) {
-    // Prevent double handling
-    if (event.type === 'touchend') {
-        event.preventDefault();
-    }
+function waitForSceneReady() {
+    return new Promise((resolve) => {
+        const scene = elements.arScene;
+        if (!scene) {
+            resolve();
+            return;
+        }
 
-    if (!state.isARActive) return;
-
-    placePortalInFront();
+        if (scene.hasLoaded) {
+            resolve();
+        } else {
+            scene.addEventListener('loaded', () => resolve(), { once: true });
+            // Fallback timeout
+            setTimeout(resolve, 2000);
+        }
+    });
 }
 
-function placePortalInFront() {
-    if (!elements.portal || !elements.camera) return;
+// =============================================================================
+// PORTAL POSITIONING
+// =============================================================================
+function positionPortalInFront() {
+    if (!elements.portal) return;
 
-    // Get camera's world direction
-    const camera = elements.camera;
-    const cameraObject = camera.object3D;
-
-    // Calculate position in front of camera
-    const direction = new THREE.Vector3(0, 0, -1);
-    direction.applyQuaternion(cameraObject.quaternion);
-
-    // Position portal at fixed distance in front, at ground level
+    // Position portal in front of camera, at ground level
+    // Camera is at y=1.6, so portal at y=0 is on the ground
     const distance = CONFIG.portal.distanceFromCamera;
-    const portalX = cameraObject.position.x + direction.x * distance;
-    const portalY = CONFIG.portal.heightFromGround; // On the ground
-    const portalZ = cameraObject.position.z + direction.z * distance;
 
-    // Set portal position
     elements.portal.setAttribute('position', {
-        x: portalX,
-        y: portalY,
-        z: portalZ
+        x: 0,
+        y: -1.6 + CONFIG.portal.heightFromGround,  // Ground level relative to camera
+        z: -distance
     });
 
     // Make portal visible
     elements.portal.setAttribute('visible', true);
 
-    // Update state
-    state.isPortalPlaced = true;
-    state.portalPosition = { x: portalX, y: portalY, z: portalZ };
-
-    // Update UI
-    elements.placementUI?.classList.add('hidden');
-    elements.portalHud?.classList.remove('hidden');
-
-    console.log(`Portal placed at: ${portalX.toFixed(2)}, ${portalY.toFixed(2)}, ${portalZ.toFixed(2)}`);
+    console.log(`Portal positioned ${distance}m ahead`);
 }
 
-function resetPortal() {
-    if (!elements.portal) return;
+function repositionPortal() {
+    // Get current camera rotation
+    if (!elements.camera) return;
 
-    // Hide portal
-    elements.portal.setAttribute('visible', false);
-    state.isPortalPlaced = false;
+    const cameraRotation = elements.camera.getAttribute('rotation');
+    const cameraObject = elements.camera.object3D;
 
-    // Show placement UI
-    elements.portalHud?.classList.add('hidden');
-    elements.placementUI?.classList.remove('hidden');
+    // Get camera's forward direction
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(cameraObject.quaternion);
 
-    console.log('Portal reset');
+    // Calculate new position
+    const distance = CONFIG.portal.distanceFromCamera;
+    const newX = direction.x * distance;
+    const newZ = direction.z * distance;
+
+    elements.portal.setAttribute('position', {
+        x: newX,
+        y: -1.6 + CONFIG.portal.heightFromGround,
+        z: newZ
+    });
+
+    console.log(`Portal repositioned to: ${newX.toFixed(2)}, ${newZ.toFixed(2)}`);
 }
 
 // =============================================================================
@@ -186,7 +188,11 @@ function showPermissionError(error) {
     let message = 'An error occurred. Please try again.';
 
     if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        message = 'Camera access is required. Please enable it in your browser settings and try again.';
+        message = 'Camera access is required. Please enable it in your browser settings and refresh the page.';
+    } else if (error.name === 'NotFoundError') {
+        message = 'No camera found. Please use a device with a camera.';
+    } else if (error.name === 'NotReadableError') {
+        message = 'Camera is in use by another app. Please close other apps and try again.';
     }
 
     if (elements.errorMessage) {
@@ -199,3 +205,12 @@ function updateLoadingStatus(status) {
         elements.loadingStatus.textContent = status;
     }
 }
+
+// =============================================================================
+// CLEANUP
+// =============================================================================
+window.addEventListener('beforeunload', () => {
+    if (state.cameraStream) {
+        state.cameraStream.getTracks().forEach(track => track.stop());
+    }
+});
