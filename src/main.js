@@ -180,8 +180,9 @@ function animatePortal(time) {
 // =============================================================================
 async function initAR() {
     // Check Zappar compatibility
-    if (!ZapparThree.browserIncompatible()) {
-        ZapparThree.permissionDeniedUI();
+    if (ZapparThree.browserIncompatible()) {
+        ZapparThree.browserIncompatibleUI();
+        throw new Error('Unsupported browser');
     }
 
     // Create renderer
