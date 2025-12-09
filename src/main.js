@@ -1,27 +1,16 @@
 /**
  * AR Portal Web App - Main Application Logic
- * Handles GPS tracking, distance calculation, and portal visibility
+ * Simple tap-to-place AR portal experience
  */
 
 // =============================================================================
-// CONFIGURATION - Set your portal coordinates here
+// CONFIGURATION
 // =============================================================================
 const CONFIG = {
     portal: {
-        latitude: 0,            // Will be set automatically
-        longitude: 0,           // Will be set automatically
-        altitude: 0,            // Altitude above ground (meters)
-        activationRadius: 50,   // Distance in meters to show portal
-        heightAboveGround: 1.5, // How high portal floats above ground
-        distanceFromUser: 10    // Distance in meters to place portal in front of user
+        distanceFromCamera: 2.5,  // Meters in front of camera when placed
+        heightFromGround: 0       // Portal sits on the ground
     },
-    gps: {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 30000
-    },
-    // For testing: automatically set portal in front of user's current location
-    autoSetToCurrentLocation: true,
     debug: false
 };
 
@@ -29,35 +18,15 @@ const CONFIG = {
 // STATE
 // =============================================================================
 let state = {
-    userPosition: null,
-    heading: null,
-    distanceToPortal: null,
-    isPortalVisible: false,
-    watchId: null,
-    hasPermissions: false
+    isARActive: false,
+    isPortalPlaced: false,
+    portalPosition: { x: 0, y: 0, z: -3 }
 };
 
 // =============================================================================
 // DOM ELEMENTS
 // =============================================================================
-const elements = {
-    loadingScreen: null,
-    loadingStatus: null,
-    permissionError: null,
-    errorMessage: null,
-    retryBtn: null,
-    distanceHud: null,
-    distanceValue: null,
-    distanceStatus: null,
-    compassArrow: null,
-    debugPanel: null,
-    debugCoords: null,
-    debugHeading: null,
-    debugAccuracy: null,
-    debugPortal: null,
-    portal: null,
-    arScene: null
-};
+const elements = {};
 
 // =============================================================================
 // INITIALIZATION
@@ -66,107 +35,42 @@ document.addEventListener('DOMContentLoaded', init);
 
 function init() {
     // Cache DOM elements
+    elements.startScreen = document.getElementById('start-screen');
+    elements.startBtn = document.getElementById('start-btn');
     elements.loadingScreen = document.getElementById('loading-screen');
     elements.loadingStatus = document.getElementById('loading-status');
     elements.permissionError = document.getElementById('permission-error');
     elements.errorMessage = document.getElementById('error-message');
     elements.retryBtn = document.getElementById('retry-btn');
-    elements.distanceHud = document.getElementById('distance-hud');
-    elements.distanceValue = document.getElementById('distance-value');
-    elements.distanceStatus = document.getElementById('distance-status');
-    elements.compassArrow = document.getElementById('compass-arrow');
-    elements.debugPanel = document.getElementById('debug-panel');
-    elements.debugCoords = document.getElementById('debug-coords');
-    elements.debugHeading = document.getElementById('debug-heading');
-    elements.debugAccuracy = document.getElementById('debug-accuracy');
-    elements.debugPortal = document.getElementById('debug-portal');
-    elements.portal = document.getElementById('portal');
+    elements.placementUI = document.getElementById('placement-ui');
+    elements.portalHud = document.getElementById('portal-hud');
+    elements.resetBtn = document.getElementById('reset-btn');
     elements.arScene = document.getElementById('ar-scene');
+    elements.portal = document.getElementById('portal');
+    elements.camera = document.getElementById('ar-camera');
 
     // Set up event listeners
-    elements.retryBtn?.addEventListener('click', requestPermissions);
+    elements.startBtn?.addEventListener('click', startExperience);
+    elements.retryBtn?.addEventListener('click', startExperience);
+    elements.resetBtn?.addEventListener('click', resetPortal);
 
-    // Debug mode toggle
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'd' || e.key === 'D') {
-            CONFIG.debug = !CONFIG.debug;
-            elements.debugPanel?.classList.toggle('hidden', !CONFIG.debug);
-        }
-    });
+    // Handle scene tap for portal placement
+    elements.arScene?.addEventListener('click', handleSceneTap);
+    elements.arScene?.addEventListener('touchend', handleSceneTap);
 
-    // Double-tap to toggle debug on mobile
-    let lastTap = 0;
-    document.addEventListener('touchend', (e) => {
-        const now = Date.now();
-        if (now - lastTap < 300) {
-            CONFIG.debug = !CONFIG.debug;
-            elements.debugPanel?.classList.toggle('hidden', !CONFIG.debug);
-        }
-        lastTap = now;
-    });
-
-    // Wait for A-Frame scene to load
-    elements.arScene?.addEventListener('loaded', () => {
-        console.log('A-Frame scene loaded');
-        updatePortalCoordinates();
-        requestPermissions();
-    });
-
-    // Fallback if scene already loaded
-    if (elements.arScene?.hasLoaded) {
-        updatePortalCoordinates();
-        requestPermissions();
-    }
+    console.log('AR Portal initialized');
 }
 
 // =============================================================================
-// PORTAL COORDINATE MANAGEMENT
+// START EXPERIENCE
 // =============================================================================
-function updatePortalCoordinates() {
-    if (elements.portal) {
-        elements.portal.setAttribute('gps-new-entity-place', {
-            latitude: CONFIG.portal.latitude,
-            longitude: CONFIG.portal.longitude
-        });
-        console.log(`Portal coordinates set to: ${CONFIG.portal.latitude}, ${CONFIG.portal.longitude}`);
-    }
-}
-
-/**
- * Set new portal coordinates programmatically
- * @param {number} lat - Latitude
- * @param {number} lng - Longitude
- */
-export function setPortalCoordinates(lat, lng) {
-    CONFIG.portal.latitude = lat;
-    CONFIG.portal.longitude = lng;
-    updatePortalCoordinates();
-    console.log(`Portal moved to: ${lat}, ${lng}`);
-}
-
-/**
- * Set portal to current user location (useful for testing)
- */
-export function setPortalToCurrentLocation() {
-    if (state.userPosition) {
-        setPortalCoordinates(state.userPosition.latitude, state.userPosition.longitude);
-    } else {
-        console.warn('User position not available yet');
-    }
-}
-
-// Expose functions globally for console access
-window.setPortalCoordinates = setPortalCoordinates;
-window.setPortalToCurrentLocation = setPortalToCurrentLocation;
-window.CONFIG = CONFIG;
-
-// =============================================================================
-// PERMISSIONS
-// =============================================================================
-async function requestPermissions() {
-    updateLoadingStatus('Requesting camera access...');
+async function startExperience() {
+    elements.startScreen?.classList.add('hidden');
+    elements.loadingScreen?.classList.remove('hidden');
 
     try {
+        updateLoadingStatus('Requesting camera access...');
+
         // Request camera permission
         const stream = await navigator.mediaDevices.getUserMedia({
             video: {
@@ -176,43 +80,105 @@ async function requestPermissions() {
             }
         });
 
-        // Stop the stream - AR.js will create its own
+        // Stop the test stream - AR.js will create its own
         stream.getTracks().forEach(track => track.stop());
 
-        updateLoadingStatus('Requesting location access...');
+        updateLoadingStatus('Starting AR...');
 
-        // Request location permission
-        const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, CONFIG.gps);
-        });
+        // Show AR scene
+        elements.arScene?.classList.remove('hidden');
 
-        state.hasPermissions = true;
-        state.userPosition = position.coords;
+        // Wait for scene to initialize
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Auto-set portal in front of user's current location for testing
-        if (CONFIG.autoSetToCurrentLocation) {
-            // Calculate position in front of user (default: north, or use device heading if available)
-            const bearing = state.heading !== null ? state.heading : 0; // Use heading or default to north
-            const offsetCoords = calculateOffsetCoordinates(
-                position.coords.latitude,
-                position.coords.longitude,
-                CONFIG.portal.distanceFromUser,
-                bearing
-            );
-            CONFIG.portal.latitude = offsetCoords.latitude;
-            CONFIG.portal.longitude = offsetCoords.longitude;
-            console.log(`Portal placed ${CONFIG.portal.distanceFromUser}m in front of user at: ${offsetCoords.latitude.toFixed(6)}, ${offsetCoords.longitude.toFixed(6)}`);
-        }
+        // Hide loading, show placement UI
+        elements.loadingScreen?.classList.add('hidden');
+        elements.placementUI?.classList.remove('hidden');
 
-        // Start the AR experience
-        startARExperience();
+        state.isARActive = true;
+
+        // Auto-place portal after a short delay for better UX
+        setTimeout(() => {
+            if (!state.isPortalPlaced) {
+                placePortalInFront();
+            }
+        }, 1500);
 
     } catch (error) {
-        console.error('Permission error:', error);
+        console.error('Start error:', error);
         showPermissionError(error);
     }
 }
 
+// =============================================================================
+// PORTAL PLACEMENT
+// =============================================================================
+function handleSceneTap(event) {
+    // Prevent double handling
+    if (event.type === 'touchend') {
+        event.preventDefault();
+    }
+
+    if (!state.isARActive) return;
+
+    placePortalInFront();
+}
+
+function placePortalInFront() {
+    if (!elements.portal || !elements.camera) return;
+
+    // Get camera's world direction
+    const camera = elements.camera;
+    const cameraObject = camera.object3D;
+
+    // Calculate position in front of camera
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(cameraObject.quaternion);
+
+    // Position portal at fixed distance in front, at ground level
+    const distance = CONFIG.portal.distanceFromCamera;
+    const portalX = cameraObject.position.x + direction.x * distance;
+    const portalY = CONFIG.portal.heightFromGround; // On the ground
+    const portalZ = cameraObject.position.z + direction.z * distance;
+
+    // Set portal position
+    elements.portal.setAttribute('position', {
+        x: portalX,
+        y: portalY,
+        z: portalZ
+    });
+
+    // Make portal visible
+    elements.portal.setAttribute('visible', true);
+
+    // Update state
+    state.isPortalPlaced = true;
+    state.portalPosition = { x: portalX, y: portalY, z: portalZ };
+
+    // Update UI
+    elements.placementUI?.classList.add('hidden');
+    elements.portalHud?.classList.remove('hidden');
+
+    console.log(`Portal placed at: ${portalX.toFixed(2)}, ${portalY.toFixed(2)}, ${portalZ.toFixed(2)}`);
+}
+
+function resetPortal() {
+    if (!elements.portal) return;
+
+    // Hide portal
+    elements.portal.setAttribute('visible', false);
+    state.isPortalPlaced = false;
+
+    // Show placement UI
+    elements.portalHud?.classList.add('hidden');
+    elements.placementUI?.classList.remove('hidden');
+
+    console.log('Portal reset');
+}
+
+// =============================================================================
+// ERROR HANDLING
+// =============================================================================
 function showPermissionError(error) {
     elements.loadingScreen?.classList.add('hidden');
     elements.permissionError?.classList.remove('hidden');
@@ -220,13 +186,7 @@ function showPermissionError(error) {
     let message = 'An error occurred. Please try again.';
 
     if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        message = 'Camera and location access are required. Please enable them in your browser settings and try again.';
-    } else if (error.code === 1) { // GeolocationPositionError.PERMISSION_DENIED
-        message = 'Location access was denied. Please enable location services and try again.';
-    } else if (error.code === 2) { // GeolocationPositionError.POSITION_UNAVAILABLE
-        message = 'Unable to determine your location. Please ensure GPS is enabled.';
-    } else if (error.code === 3) { // GeolocationPositionError.TIMEOUT
-        message = 'Location request timed out. Please try again.';
+        message = 'Camera access is required. Please enable it in your browser settings and try again.';
     }
 
     if (elements.errorMessage) {
@@ -239,266 +199,3 @@ function updateLoadingStatus(status) {
         elements.loadingStatus.textContent = status;
     }
 }
-
-// =============================================================================
-// AR EXPERIENCE
-// =============================================================================
-function startARExperience() {
-    console.log('Starting AR experience');
-    updateLoadingStatus('Starting AR...');
-
-    // Hide loading screen
-    elements.loadingScreen?.classList.add('hidden');
-
-    // Show distance HUD
-    elements.distanceHud?.classList.remove('hidden');
-
-    // Start GPS tracking
-    startGPSTracking();
-
-    // Start device orientation tracking
-    startOrientationTracking();
-}
-
-// =============================================================================
-// GPS TRACKING
-// =============================================================================
-function startGPSTracking() {
-    if (!navigator.geolocation) {
-        console.error('Geolocation not supported');
-        return;
-    }
-
-    // Watch position
-    state.watchId = navigator.geolocation.watchPosition(
-        handlePositionUpdate,
-        handlePositionError,
-        CONFIG.gps
-    );
-
-    console.log('GPS tracking started');
-}
-
-function handlePositionUpdate(position) {
-    state.userPosition = position.coords;
-
-    // Calculate distance to portal
-    state.distanceToPortal = calculateDistance(
-        position.coords.latitude,
-        position.coords.longitude,
-        CONFIG.portal.latitude,
-        CONFIG.portal.longitude
-    );
-
-    // Update UI
-    updateDistanceUI();
-
-    // Update portal visibility
-    updatePortalVisibility();
-
-    // Update debug info
-    updateDebugInfo(position);
-}
-
-function handlePositionError(error) {
-    console.error('GPS error:', error);
-    updateDebugInfo(null, error);
-}
-
-// =============================================================================
-// ORIENTATION TRACKING
-// =============================================================================
-function startOrientationTracking() {
-    // Check if DeviceOrientationEvent is supported
-    if (window.DeviceOrientationEvent) {
-        // iOS 13+ requires permission request
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-            // We'll request this on user interaction
-            document.addEventListener('click', requestOrientationPermission, { once: true });
-            document.addEventListener('touchstart', requestOrientationPermission, { once: true });
-        } else {
-            window.addEventListener('deviceorientation', handleOrientation);
-        }
-    }
-}
-
-async function requestOrientationPermission() {
-    try {
-        const permission = await DeviceOrientationEvent.requestPermission();
-        if (permission === 'granted') {
-            window.addEventListener('deviceorientation', handleOrientation);
-        }
-    } catch (error) {
-        console.warn('Orientation permission denied:', error);
-    }
-}
-
-function handleOrientation(event) {
-    if (event.alpha !== null) {
-        state.heading = event.alpha;
-        updateCompass();
-    }
-}
-
-function updateCompass() {
-    if (!state.userPosition || !state.heading || !elements.compassArrow) return;
-
-    // Calculate bearing to portal
-    const bearing = calculateBearing(
-        state.userPosition.latitude,
-        state.userPosition.longitude,
-        CONFIG.portal.latitude,
-        CONFIG.portal.longitude
-    );
-
-    // Adjust for device heading
-    const rotation = bearing - state.heading;
-    elements.compassArrow.style.transform = `rotate(${rotation}deg)`;
-}
-
-// =============================================================================
-// DISTANCE & BEARING CALCULATIONS
-// =============================================================================
-/**
- * Calculate distance between two GPS coordinates using Haversine formula
- * @returns Distance in meters
- */
-function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Earth's radius in meters
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-        Math.cos(φ1) * Math.cos(φ2) *
-        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c;
-}
-
-/**
- * Calculate bearing from point 1 to point 2
- * @returns Bearing in degrees (0-360)
- */
-function calculateBearing(lat1, lon1, lat2, lon2) {
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-    const y = Math.sin(Δλ) * Math.cos(φ2);
-    const x = Math.cos(φ1) * Math.sin(φ2) -
-        Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
-
-    const θ = Math.atan2(y, x);
-    return (θ * 180 / Math.PI + 360) % 360;
-}
-
-/**
- * Calculate new GPS coordinates given a starting point, distance, and bearing
- * @param {number} lat - Starting latitude in degrees
- * @param {number} lon - Starting longitude in degrees
- * @param {number} distance - Distance in meters
- * @param {number} bearing - Bearing in degrees (0 = north, 90 = east)
- * @returns {{latitude: number, longitude: number}} New coordinates
- */
-function calculateOffsetCoordinates(lat, lon, distance, bearing) {
-    const R = 6371e3; // Earth's radius in meters
-    const φ1 = lat * Math.PI / 180;
-    const λ1 = lon * Math.PI / 180;
-    const θ = bearing * Math.PI / 180;
-    const δ = distance / R; // Angular distance
-
-    const φ2 = Math.asin(
-        Math.sin(φ1) * Math.cos(δ) +
-        Math.cos(φ1) * Math.sin(δ) * Math.cos(θ)
-    );
-
-    const λ2 = λ1 + Math.atan2(
-        Math.sin(θ) * Math.sin(δ) * Math.cos(φ1),
-        Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2)
-    );
-
-    return {
-        latitude: φ2 * 180 / Math.PI,
-        longitude: λ2 * 180 / Math.PI
-    };
-}
-
-// =============================================================================
-// UI UPDATES
-// =============================================================================
-function updateDistanceUI() {
-    if (!elements.distanceValue || !elements.distanceStatus) return;
-
-    const distance = state.distanceToPortal;
-
-    if (distance === null) {
-        elements.distanceValue.textContent = '--';
-        elements.distanceStatus.textContent = 'Locating...';
-        return;
-    }
-
-    // Format distance
-    if (distance < 1000) {
-        elements.distanceValue.textContent = `${Math.round(distance)}m`;
-    } else {
-        elements.distanceValue.textContent = `${(distance / 1000).toFixed(1)}km`;
-    }
-
-    // Update status based on distance
-    if (distance <= CONFIG.portal.activationRadius) {
-        elements.distanceStatus.textContent = '🌀 Portal Active!';
-        elements.distanceValue.classList.add('active');
-    } else if (distance <= CONFIG.portal.activationRadius * 2) {
-        elements.distanceStatus.textContent = 'Almost there...';
-        elements.distanceValue.classList.remove('active');
-    } else {
-        elements.distanceStatus.textContent = 'Navigate to portal';
-        elements.distanceValue.classList.remove('active');
-    }
-}
-
-function updatePortalVisibility() {
-    if (!elements.portal) return;
-
-    const shouldBeVisible = state.distanceToPortal !== null &&
-        state.distanceToPortal <= CONFIG.portal.activationRadius;
-
-    if (shouldBeVisible !== state.isPortalVisible) {
-        state.isPortalVisible = shouldBeVisible;
-        elements.portal.setAttribute('visible', shouldBeVisible);
-
-        console.log(`Portal visibility: ${shouldBeVisible ? 'VISIBLE' : 'HIDDEN'} (distance: ${Math.round(state.distanceToPortal)}m)`);
-    }
-}
-
-function updateDebugInfo(position, error = null) {
-    if (!CONFIG.debug) return;
-
-    if (position) {
-        const coords = position.coords;
-        elements.debugCoords.textContent = `Coords: ${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
-        elements.debugAccuracy.textContent = `Accuracy: ±${Math.round(coords.accuracy)}m`;
-    }
-
-    if (state.heading !== null) {
-        elements.debugHeading.textContent = `Heading: ${Math.round(state.heading)}°`;
-    }
-
-    elements.debugPortal.textContent = `Portal: ${state.isPortalVisible ? 'Visible' : 'Hidden'} (${Math.round(state.distanceToPortal || 0)}m)`;
-
-    if (error) {
-        elements.debugCoords.textContent = `GPS Error: ${error.message}`;
-    }
-}
-
-// =============================================================================
-// CLEANUP
-// =============================================================================
-window.addEventListener('beforeunload', () => {
-    if (state.watchId !== null) {
-        navigator.geolocation.clearWatch(state.watchId);
-    }
-});
