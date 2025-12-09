@@ -14,5 +14,9 @@
   "devDependencies": {
     "vite": "^7.2.7",
     "vite-plugin-mkcert": "^1.17.9"
+  },
+  "dependencies": {
+    "@zappar/zappar-threejs": "^4.2.0",
+    "three": "^0.181.2"
   }
 }

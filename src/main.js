@@ -1,221 +1,321 @@
 /**
- * AR Portal Web App - Main Application Logic
- * Camera-based AR with 3D portal overlay
+ * AR Portal - Zappar + Three.js Implementation
+ * Uses Instant World Tracking for cross-platform AR
  */
 
-// =============================================================================
-// CONFIGURATION
-// =============================================================================
-const CONFIG = {
-    portal: {
-        distanceFromCamera: 3,    // Meters in front of camera
-        heightFromGround: 0       // Portal sits on ground level
-    }
-};
-
-// =============================================================================
-// STATE
-// =============================================================================
-let state = {
-    isARActive: false,
-    cameraStream: null
-};
+import * as THREE from 'three';
+import * as ZapparThree from '@zappar/zappar-threejs';
 
 // =============================================================================
 // DOM ELEMENTS
 // =============================================================================
-const elements = {};
+const startOverlay = document.getElementById('start-overlay');
+const startBtn = document.getElementById('start-btn');
+const placementUI = document.getElementById('placement-ui');
+const portalHud = document.getElementById('portal-hud');
+const resetBtn = document.getElementById('reset-btn');
+const container = document.getElementById('canvas-container');
+
+// =============================================================================
+// STATE
+// =============================================================================
+let hasPlaced = false;
+let renderer, scene, camera, instantTracker, portalGroup;
+
+// =============================================================================
+// PORTAL CREATION
+// =============================================================================
+function createPortal() {
+    const group = new THREE.Group();
+
+    // Portal colors
+    const primaryColor = 0x8B5CF6;
+    const secondaryColor = 0xC4B5FD;
+    const accentColor = 0xDDD6FE;
+    const darkColor = 0x0a0015;
+
+    // Main ring (torus)
+    const mainRingGeometry = new THREE.TorusGeometry(1, 0.08, 32, 64);
+    const mainRingMaterial = new THREE.MeshStandardMaterial({
+        color: primaryColor,
+        emissive: primaryColor,
+        emissiveIntensity: 0.5,
+        side: THREE.DoubleSide,
+        metalness: 0.3,
+        roughness: 0.4
+    });
+    const mainRing = new THREE.Mesh(mainRingGeometry, mainRingMaterial);
+    mainRing.name = 'mainRing';
+    group.add(mainRing);
+
+    // Inner ring
+    const innerRingGeometry = new THREE.TorusGeometry(0.75, 0.04, 24, 48);
+    const innerRingMaterial = new THREE.MeshStandardMaterial({
+        color: secondaryColor,
+        emissive: secondaryColor,
+        emissiveIntensity: 0.6,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+    const innerRing = new THREE.Mesh(innerRingGeometry, innerRingMaterial);
+    innerRing.name = 'innerRing';
+    group.add(innerRing);
+
+    // Outer glow ring
+    const outerRingGeometry = new THREE.TorusGeometry(1.2, 0.02, 16, 48);
+    const outerRingMaterial = new THREE.MeshStandardMaterial({
+        color: accentColor,
+        emissive: accentColor,
+        emissiveIntensity: 0.8,
+        transparent: true,
+        opacity: 0.5,
+        side: THREE.DoubleSide
+    });
+    const outerRing = new THREE.Mesh(outerRingGeometry, outerRingMaterial);
+    outerRing.name = 'outerRing';
+    group.add(outerRing);
+
+    // Portal center (dark void)
+    const centerGeometry = new THREE.CircleGeometry(0.65, 32);
+    const centerMaterial = new THREE.MeshBasicMaterial({
+        color: darkColor,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide
+    });
+    const center = new THREE.Mesh(centerGeometry, centerMaterial);
+    center.name = 'center';
+    group.add(center);
+
+    // Swirl effect
+    const swirlGeometry = new THREE.CircleGeometry(0.55, 32);
+    const swirlMaterial = new THREE.MeshBasicMaterial({
+        color: primaryColor,
+        transparent: true,
+        opacity: 0.4,
+        side: THREE.DoubleSide
+    });
+    const swirl = new THREE.Mesh(swirlGeometry, swirlMaterial);
+    swirl.name = 'swirl';
+    swirl.position.z = 0.01;
+    group.add(swirl);
+
+    // Floating particles
+    const particleGeometry = new THREE.SphereGeometry(0.03, 16, 16);
+    const particleMaterial = new THREE.MeshStandardMaterial({
+        color: secondaryColor,
+        emissive: secondaryColor,
+        emissiveIntensity: 0.8
+    });
+
+    for (let i = 0; i < 5; i++) {
+        const particle = new THREE.Mesh(particleGeometry, particleMaterial.clone());
+        const angle = (i / 5) * Math.PI * 2;
+        particle.position.set(
+            Math.cos(angle) * 1.1,
+            Math.sin(angle) * 1.1,
+            0
+        );
+        particle.userData.angle = angle;
+        particle.userData.radius = 1.1;
+        particle.name = `particle${i}`;
+        group.add(particle);
+    }
+
+    return group;
+}
+
+// =============================================================================
+// ANIMATION
+// =============================================================================
+function animatePortal(time) {
+    if (!portalGroup) return;
+
+    const t = time * 0.001; // Convert to seconds
+
+    // Rotate main ring
+    const mainRing = portalGroup.getObjectByName('mainRing');
+    if (mainRing) {
+        mainRing.rotation.z = t * 0.5;
+    }
+
+    // Pulse inner ring
+    const innerRing = portalGroup.getObjectByName('innerRing');
+    if (innerRing) {
+        const scale = 1 + Math.sin(t * 2) * 0.05;
+        innerRing.scale.set(scale, scale, 1);
+    }
+
+    // Rotate swirl
+    const swirl = portalGroup.getObjectByName('swirl');
+    if (swirl) {
+        swirl.rotation.z = -t;
+    }
+
+    // Pulse outer ring opacity
+    const outerRing = portalGroup.getObjectByName('outerRing');
+    if (outerRing) {
+        outerRing.material.opacity = 0.3 + Math.sin(t * 3) * 0.3;
+    }
+
+    // Animate particles
+    for (let i = 0; i < 5; i++) {
+        const particle = portalGroup.getObjectByName(`particle${i}`);
+        if (particle) {
+            const angle = particle.userData.angle + t * 0.5;
+            const radius = particle.userData.radius + Math.sin(t * 2 + i) * 0.1;
+            particle.position.x = Math.cos(angle) * radius;
+            particle.position.y = Math.sin(angle) * radius;
+            particle.position.z = Math.sin(t * 3 + i) * 0.2;
+        }
+    }
+
+    // Gentle floating motion for whole portal
+    portalGroup.position.y = Math.sin(t) * 0.05;
+}
 
 // =============================================================================
 // INITIALIZATION
 // =============================================================================
-document.addEventListener('DOMContentLoaded', init);
-
-function init() {
-    // Cache DOM elements
-    elements.cameraFeed = document.getElementById('camera-feed');
-    elements.startScreen = document.getElementById('start-screen');
-    elements.startBtn = document.getElementById('start-btn');
-    elements.loadingScreen = document.getElementById('loading-screen');
-    elements.loadingStatus = document.getElementById('loading-status');
-    elements.permissionError = document.getElementById('permission-error');
-    elements.errorMessage = document.getElementById('error-message');
-    elements.retryBtn = document.getElementById('retry-btn');
-    elements.portalHud = document.getElementById('portal-hud');
-    elements.resetBtn = document.getElementById('reset-btn');
-    elements.arScene = document.getElementById('ar-scene');
-    elements.portal = document.getElementById('portal');
-    elements.camera = document.getElementById('ar-camera');
-    elements.cameraRig = document.getElementById('camera-rig');
-
-    // Set up event listeners
-    elements.startBtn?.addEventListener('click', startExperience);
-    elements.retryBtn?.addEventListener('click', startExperience);
-    elements.resetBtn?.addEventListener('click', repositionPortal);
-
-    console.log('AR Portal initialized');
-}
-
-// =============================================================================
-// START EXPERIENCE
-// =============================================================================
-async function startExperience() {
-    elements.startScreen?.classList.add('hidden');
-    elements.loadingScreen?.classList.remove('hidden');
-
-    try {
-        updateLoadingStatus('Accessing camera...');
-
-        // Request camera with back-facing preference
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: { ideal: 'environment' },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
-            },
-            audio: false
-        });
-
-        state.cameraStream = stream;
-
-        // Display camera feed
-        if (elements.cameraFeed) {
-            elements.cameraFeed.srcObject = stream;
-            await elements.cameraFeed.play();
-        }
-
-        updateLoadingStatus('Starting AR...');
-
-        // Show AR scene
-        elements.arScene?.classList.remove('hidden');
-
-        // Wait for A-Frame to initialize
-        await waitForSceneReady();
-
-        // Hide loading
-        elements.loadingScreen?.classList.add('hidden');
-
-        // Position and show portal
-        positionPortalInFront();
-
-        // Show HUD
-        elements.portalHud?.classList.remove('hidden');
-
-        state.isARActive = true;
-        console.log('AR Experience started');
-
-    } catch (error) {
-        console.error('Start error:', error);
-        showPermissionError(error);
+async function initAR() {
+    // Check Zappar compatibility
+    if (!ZapparThree.browserIncompatible()) {
+        ZapparThree.permissionDeniedUI();
     }
-}
 
-// =============================================================================
-// SCENE READY
-// =============================================================================
-function waitForSceneReady() {
-    return new Promise((resolve) => {
-        const scene = elements.arScene;
-        if (!scene) {
-            resolve();
+    // Create renderer
+    renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    // Request camera permission
+    ZapparThree.permissionRequestUI().then((granted) => {
+        if (!granted) {
+            ZapparThree.permissionDeniedUI();
             return;
         }
-
-        if (scene.hasLoaded) {
-            resolve();
-        } else {
-            scene.addEventListener('loaded', () => resolve(), { once: true });
-            // Fallback timeout
-            setTimeout(resolve, 2000);
-        }
+        startScene();
     });
 }
 
-// =============================================================================
-// PORTAL POSITIONING
-// =============================================================================
-function positionPortalInFront() {
-    if (!elements.portal) {
-        console.error('Portal element not found!');
-        return;
-    }
+function startScene() {
+    // Create scene
+    scene = new THREE.Scene();
 
-    // Position portal in front of camera
-    // Since this is AR overlay, position relative to camera starting point
-    const distance = CONFIG.portal.distanceFromCamera;
+    // Create Zappar camera
+    camera = new ZapparThree.Camera();
 
-    // Position: directly in front, slightly below eye level
-    elements.portal.setAttribute('position', {
-        x: 0,
-        y: -0.5,  // Slightly below eye level so the horizontal portal is visible
-        z: -distance
-    });
+    // Add camera background (shows device camera feed)
+    const cameraBackground = new ZapparThree.CameraEnvironmentMap();
+    scene.background = camera.backgroundTexture;
+    scene.environment = cameraBackground.environmentMap;
 
-    // Make portal visible
-    elements.portal.setAttribute('visible', true);
+    // Create Instant World Tracker
+    instantTracker = new ZapparThree.InstantWorldTracker();
 
-    console.log(`Portal positioned: x=0, y=-0.5, z=-${distance}`);
-    console.log('Portal visible:', elements.portal.getAttribute('visible'));
-}
+    // Create portal
+    portalGroup = createPortal();
+    portalGroup.visible = false;
 
-function repositionPortal() {
-    // Get current camera rotation
-    if (!elements.camera) return;
+    // Add portal to tracker's anchor
+    instantTracker.anchor.add(portalGroup);
 
-    const cameraRotation = elements.camera.getAttribute('rotation');
-    const cameraObject = elements.camera.object3D;
+    // Add the tracker anchor to the scene
+    scene.add(instantTracker.anchor);
 
-    // Get camera's forward direction
-    const direction = new THREE.Vector3(0, 0, -1);
-    direction.applyQuaternion(cameraObject.quaternion);
+    // Add lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
 
-    // Calculate new position
-    const distance = CONFIG.portal.distanceFromCamera;
-    const newX = direction.x * distance;
-    const newZ = direction.z * distance;
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(1, 2, 1);
+    instantTracker.anchor.add(directionalLight);
 
-    elements.portal.setAttribute('position', {
-        x: newX,
-        y: -1.6 + CONFIG.portal.heightFromGround,
-        z: newZ
-    });
+    // Handle window resize
+    window.addEventListener('resize', onResize);
 
-    console.log(`Portal repositioned to: ${newX.toFixed(2)}, ${newZ.toFixed(2)}`);
+    // Handle tap to place
+    renderer.domElement.addEventListener('click', onTap);
+    renderer.domElement.addEventListener('touchstart', onTap);
+
+    // Start animation loop
+    animate();
+
+    // Show placement UI
+    placementUI.classList.remove('hidden');
+
+    console.log('Zappar AR initialized');
 }
 
 // =============================================================================
-// ERROR HANDLING
+// EVENT HANDLERS
 // =============================================================================
-function showPermissionError(error) {
-    elements.loadingScreen?.classList.add('hidden');
-    elements.permissionError?.classList.remove('hidden');
+function onTap(event) {
+    event.preventDefault();
 
-    let message = 'An error occurred. Please try again.';
+    if (!hasPlaced) {
+        // Place the portal
+        instantTracker.setAnchorPoseFromCameraOffset(0, 0, -3);
+        portalGroup.visible = true;
+        hasPlaced = true;
 
-    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        message = 'Camera access is required. Please enable it in your browser settings and refresh the page.';
-    } else if (error.name === 'NotFoundError') {
-        message = 'No camera found. Please use a device with a camera.';
-    } else if (error.name === 'NotReadableError') {
-        message = 'Camera is in use by another app. Please close other apps and try again.';
-    }
+        // Update UI
+        placementUI.classList.add('hidden');
+        portalHud.classList.remove('hidden');
 
-    if (elements.errorMessage) {
-        elements.errorMessage.textContent = message;
+        console.log('Portal placed');
     }
 }
 
-function updateLoadingStatus(status) {
-    if (elements.loadingStatus) {
-        elements.loadingStatus.textContent = status;
-    }
+function onResize() {
+    renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 // =============================================================================
-// CLEANUP
+// RESET
 // =============================================================================
-window.addEventListener('beforeunload', () => {
-    if (state.cameraStream) {
-        state.cameraStream.getTracks().forEach(track => track.stop());
+function resetPortal() {
+    hasPlaced = false;
+    portalGroup.visible = false;
+
+    // Update UI
+    portalHud.classList.add('hidden');
+    placementUI.classList.remove('hidden');
+
+    console.log('Portal reset');
+}
+
+// =============================================================================
+// ANIMATION LOOP
+// =============================================================================
+function animate(time) {
+    requestAnimationFrame(animate);
+
+    // Update camera from device
+    camera.updateFrame(renderer);
+
+    // Animate portal
+    if (hasPlaced) {
+        animatePortal(time);
     }
+
+    // Render
+    renderer.render(scene, camera);
+}
+
+// =============================================================================
+// START
+// =============================================================================
+startBtn.addEventListener('click', () => {
+    startOverlay.classList.add('hidden');
+    initAR();
 });
+
+resetBtn.addEventListener('click', resetPortal);
+
+console.log('AR Portal ready');
